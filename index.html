@@ -93,10 +93,51 @@ function updateStatus(){
  inc.classList.toggle("hidden",!bad);
 }
 function historial(){
- const sorted=[...registros].sort((a,b)=>b.timestamp-a.timestamp);
- return `<div class="card"><h2>Historial</h2><p>${registros.length} registros guardados</p>
- <button class="secondary full" onclick="exportCSV()">📊 Exportar CSV</button><button class="secondary full" onclick="exportPDF()">📄 Informe PDF mensual</button>
- ${sorted.map(r=>`<div class="record ${r.incidencia?"badrecord":""}"><b>${esc(r.equipo)}</b><br>${r.temp} °C · ${esc(r.fecha)}<br>Responsable: ${esc(r.responsable)}<br>${r.incidencia?"🔴 Incidencia: "+esc(r.accion):"🟢 Dentro de rango"}<br>Firma: ${esc(r.firma||"Firma digital")}</div>`).join("")||"<p>No hay registros todavía.</p>"}</div>`;
+ const years=[...new Set(registros.map(r=>r.dia?.slice(0,4)).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
+ const months=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+ const selectedYear=window.histYear??"todos", selectedMonth=window.histMonth??"todos";
+ let filtered=[...registros].filter(r=>{
+   const y=r.dia?.slice(0,4), m=r.dia?.slice(5,7);
+   return (selectedYear==="todos"||y===selectedYear)&&(selectedMonth==="todos"||m===selectedMonth);
+ }).sort((a,b)=>b.timestamp-a.timestamp);
+ const label=(r)=>{
+   const d=new Date(r.dia+"T12:00:00");
+   return d.toLocaleDateString("es-ES",{day:"2-digit",month:"long",year:"numeric"});
+ };
+ const groups={};
+ filtered.forEach(r=>{
+   const key=r.dia?.slice(0,7)||"Sin fecha";
+   (groups[key]??=[]).push(r);
+ });
+ let body="";
+ Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(key=>{
+   const [y,m]=key.split("-");
+   const title=key==="Sin fecha"?"Sin fecha":`${months[Number(m)-1]} ${y}`;
+   body+=`<h3 style="margin:18px 0 8px">${title} <span class="small">(${groups[key].length})</span></h3>`;
+   body+=groups[key].map(r=>`<div class="record ${r.incidencia?"badrecord":""}">
+     <b>${esc(r.equipo)}</b><br>${r.temp} °C · ${esc(label(r))}<br>
+     Responsable: ${esc(r.responsable)}<br>
+     ${r.incidencia?"🔴 Incidencia: "+esc(r.accion):"🟢 Dentro de rango"}<br>
+     Firma: ${esc(r.firma||"Firma digital")}
+   </div>`).join("");
+ });
+ return `<div class="card"><h2>Historial</h2>
+ <p>${filtered.length} de ${registros.length} registros mostrados</p>
+ <div class="row">
+   <div><label>Año</label><select id="historyYear">
+     <option value="todos" ${selectedYear==="todos"?"selected":""}>Todos los años</option>
+     ${years.map(y=>`<option value="${y}" ${selectedYear===y?"selected":""}>${y}</option>`).join("")}
+   </select></div>
+   <div><label>Mes</label><select id="historyMonth">
+     <option value="todos" ${selectedMonth==="todos"?"selected":""}>Todos los meses</option>
+     ${months.map((name,i)=>{const v=String(i+1).padStart(2,"0");return `<option value="${v}" ${selectedMonth===v?"selected":""}>${name}</option>`}).join("")}
+   </select></div>
+ </div>
+ <button class="secondary full" onclick="window.histYear='todos';window.histMonth='todos';render()">📚 Ver todos los registros</button>
+ <button class="secondary full" onclick="exportCSV()">📊 Exportar CSV</button>
+ <button class="secondary full" onclick="exportPDF()">📄 Informe PDF</button>
+ ${body||"<p>No hay registros para el periodo seleccionado.</p>"}
+ </div>`;
 }
 function config(){
  return `<div class="card"><h2>Configuración</h2><p class="small">Cambia los límites o añade equipos. Los cambios se guardan automáticamente.</p>
@@ -117,6 +158,9 @@ function calendario(){
 }
 function bind(){
  document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>setPage(b.dataset.page));
+ const hy=document.getElementById("historyYear"), hm=document.getElementById("historyMonth");
+ if(hy)hy.onchange=()=>{window.histYear=hy.value;render()};
+ if(hm)hm.onchange=()=>{window.histMonth=hm.value;render()};
  document.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>{selected=+b.dataset.e;render()});
  const t=document.getElementById("temp");if(t)t.oninput=updateStatus;
  const r=document.getElementById("responsable");if(r)r.oninput=()=>{responsable=r.value;save()};
